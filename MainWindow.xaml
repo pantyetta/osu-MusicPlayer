@@ -22,6 +22,9 @@
                 <Separator/>
                 <MenuItem Header="終了" Click="MenuItem_Click"/>
             </MenuItem>
+            <MenuItem x:Name="MenuItem_Saisei" Header="再生(_S)">
+                <MenuItem x:Name="MenuItem_Repeat" Header="リピート" Click="MenuItem_Repeat_Click"/>
+            </MenuItem>
             <MenuItem x:Name="MenuItem_Setting" Header="設定(_O)">
                 <MenuItem Header="曲更新" Click="MenuItem_Click_1"/>
                 <MenuItem Header="osu!アドレス変更..." Click="MenuItem_Click_3"/>

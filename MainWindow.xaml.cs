@@ -77,8 +77,8 @@ namespace osu_MusicPlayer
             notifyIcon.Icon = new System.Drawing.Icon(iconStream);
 
             //menustrip関係
-            toolStripTitle.Text = "タイトル";
-            toolStripArtist.Text = "アーティスト";
+            toolStripTitle.Text = "タイトルが表示されます。";
+            toolStripArtist.Text = "アーティストが表示されます。";
             toolStripControl.Text = "コントロール";
             toolStripBack.Text = "Back";
             toolStripPlay.Text = "Play";
@@ -427,16 +427,19 @@ namespace osu_MusicPlayer
             {
                 if (playlistbool)
                 {
-                    //プレイリスト
-                    //PlayNextがあったらそれを読み込む
-                    if (PlaylistNext.Count > 0)
+                    if(MenuItem_Repeat.IsChecked == false)
                     {
-                        number = PlaylistNext[0];
-                        PlaylistNext.RemoveAt(0);
-                    }
+                        //プレイリスト
+                        //PlayNextがあったらそれを読み込む
+                        if (PlaylistNext.Count > 0)
+                        {
+                            number = PlaylistNext[0];
+                            PlaylistNext.RemoveAt(0);
+                        }
 
-                    //PlayHistryにindexを追加する
-                    PlaylistHistory.Add(number);
+                        //PlayHistryにindexを追加する
+                        PlaylistHistory.Add(number);
+                    }
 
 
                     //URLをセットして曲を流す
@@ -448,17 +451,20 @@ namespace osu_MusicPlayer
                 }
                 else
                 {
-                    //普通の再生
-                    //PlayNextがあったらそれを読み込む
-                    if (PlayNext.Count > 0)
+                    if (MenuItem_Repeat.IsChecked == false)
                     {
-                        number = PlayNext[0];
-                        PlayNext.RemoveAt(0);
+                        //普通の再生
+                        //PlayNextがあったらそれを読み込む
+                        if (PlayNext.Count > 0)
+                        {
+                            number = PlayNext[0];
+                            PlayNext.RemoveAt(0);
+                        }
+
+                        //PlayHistryにindexを追加する
+                        PlayHistory.Add(number);
+
                     }
-
-                    //PlayHistryにindexを追加する
-                    PlayHistory.Add(number);
-
 
                     //URLをセットして曲を流す
                     NowPlay = number;
@@ -560,6 +566,7 @@ namespace osu_MusicPlayer
         /// <summary>
         /// newNextIndexメソッド
         /// 次の曲をランダムに決める
+        /// Repeat選択してあったらそれ流す
         /// </summary>
         public int NewNextIndex(int Max)
         {
@@ -569,16 +576,21 @@ namespace osu_MusicPlayer
             Random random = new Random();
             int index;
 
-            //同じ曲(曲名)だったらもう一度
-            while (true)
+            if (MenuItem_Repeat.IsChecked == false)
             {
-                index = random.Next(0, Max);
+                //同じ曲(曲名)だったらもう一度
+                while (true)
+                {
+                    index = random.Next(0, Max);
 
-                if (Label_Title.Content.ToString() == PlayerTitle[index])
-                    continue;
+                    if (Label_Title.Content.ToString() == PlayerTitle[index])
+                        continue;
 
-                break;
+                    break;
+                }
             }
+            else
+                index = NowPlay;
 
             return index;
         }
@@ -887,7 +899,7 @@ namespace osu_MusicPlayer
         /// </summary>
         private void MenuItem_Click_2(object sender, RoutedEventArgs e)
         {
-            System.Windows.MessageBox.Show("Osu! Music Player\r\nversion: 0.5\r\n制作: pantyetta", "アプリについて");
+            System.Windows.MessageBox.Show("Osu! Music Player\r\nversion: 0.5.2\r\n制作: pantyetta", "アプリについて");
         }
 
 
@@ -1169,6 +1181,15 @@ namespace osu_MusicPlayer
 
                 System.Windows.MessageBox.Show("プレイリスト" + header[0] + "を削除しました。", "連絡");
             }
+        }
+
+
+        private void MenuItem_Repeat_Click(object sender, RoutedEventArgs e)
+        {
+            if (MenuItem_Repeat.IsChecked == false)
+                MenuItem_Repeat.IsChecked = true;
+            else
+                MenuItem_Repeat.IsChecked = false;
         }
     }
 }
