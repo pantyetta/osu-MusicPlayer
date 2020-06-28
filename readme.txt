@@ -51,9 +51,9 @@ osu!で新しく曲を追加したら手動で上部のメニューより設定(
 仕様ツール
 visual Studio 2019
 
-2020/06/03
+2020/06/28
 Osu! Music Player
-ver.0.5.2
+ver.0.5.3
 ぱんちぇった
 twitter: https://twitter.com/Pantyetta1226
 github: https://github.com/pantyetta

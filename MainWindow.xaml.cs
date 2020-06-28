@@ -121,6 +121,7 @@ namespace osu_MusicPlayer
             else
             {
                 NewSaveMusic(textfilePath);
+                NewReadMusic(textfilePath);
             }
 
             Debug.WriteLine(PlayerURL.Count + "曲");
@@ -323,6 +324,8 @@ namespace osu_MusicPlayer
                 bool mapflag = true;
 
                 string[] beatmap = new string[6];
+                beatmap[2] = "";
+                beatmap[4] = "";
                 beatmap[5] = "";
 
                 StreamReader streamReader = new StreamReader(osufile);
@@ -385,6 +388,7 @@ namespace osu_MusicPlayer
                     SearchArtist.Add(beatmap[3]);
                     PlayerArtist.Add(beatmap[4]);
                     SearchTags.Add(beatmap[5]);
+
                 }   
             }
             streamWriter.Close();
@@ -401,6 +405,14 @@ namespace osu_MusicPlayer
             var count = File.ReadLines(osuplayerFilePath).Count();
 
             string[] triger = { ",/ " };
+
+            //値の初期化
+            PlayerURL.Clear();
+            SearchTitle.Clear();
+            PlayerTitle.Clear();
+            SearchArtist.Clear();
+            PlayerArtist.Clear();
+            SearchTags.Clear();
 
             //各値に代入
             for (int i = 0; i < count; i++)
@@ -883,6 +895,7 @@ namespace osu_MusicPlayer
                 try
                 {
                     NewSaveMusic(textfilePath);
+                    NewReadMusic(textfilePath);
 
                     System.Windows.MessageBox.Show("読み込みが終わりました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
@@ -899,7 +912,7 @@ namespace osu_MusicPlayer
         /// </summary>
         private void MenuItem_Click_2(object sender, RoutedEventArgs e)
         {
-            System.Windows.MessageBox.Show("Osu! Music Player\r\nversion: 0.5.2\r\n制作: pantyetta", "アプリについて");
+            System.Windows.MessageBox.Show("Osu! Music Player\r\nversion: 0.5.3\r\n制作: pantyetta", "アプリについて");
         }
 
 
@@ -939,7 +952,9 @@ namespace osu_MusicPlayer
         private void MenuItem_Click_5(object sender, RoutedEventArgs e)
         {
             var window2 = new Window2();
-            
+
+            window2.Text.Clear();
+
             window2.Show();
 
             window2.Button_serch.Click += delegate
@@ -953,6 +968,7 @@ namespace osu_MusicPlayer
                     window2.ListBox_Result.Items.Add(PlayerTitle[SearchIndex] + " -- " + PlayerArtist[SearchIndex]);
                 }
 
+                
                 //タイトル(日本語)での検索
                 foreach (string t in PlayerTitle.FindAll(x => x.IndexOf(window2.Text.Text, StringComparison.OrdinalIgnoreCase) >= 0))
                 {
@@ -1017,6 +1033,7 @@ namespace osu_MusicPlayer
                     if (clickflag)
                         window2.ListBox_Result.Items.Add(clicktemp);
                 }
+                
             };
 
             window2.ListBox_Result.SelectionChanged += delegate
