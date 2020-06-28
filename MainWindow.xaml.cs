@@ -58,13 +58,12 @@ namespace osu_MusicPlayer
         List<int> PlaylistHistory = new List<int>();
         List<int> PlaylistNext = new List<int>();
 
-
         int NowPlay;
 
         List<int> PlayHistory = new List<int>();
         List<int> PlayNext = new List<int>();
 
-
+        bool exitbool;
 
         public MainWindow()
         {
@@ -99,6 +98,8 @@ namespace osu_MusicPlayer
             menuStrip.Items.Add(toolStripExit);
 
             notifyIcon.ContextMenuStrip = menuStrip;
+
+            exitbool = false;
 
             //色々設定
             textfilePath = appPath + @"\music.osuplayer";
@@ -187,6 +188,15 @@ namespace osu_MusicPlayer
         /// </summary>
         private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            //アプリの終了
+            if (exitbool)
+            {
+                notifyIcon.Dispose();
+                System.Windows.Application.Current.Shutdown();
+                return;
+            }
+
+
             //閉じないアプリを
             e.Cancel = true;
 
@@ -880,6 +890,7 @@ namespace osu_MusicPlayer
         //アプリを終了する。 
         private void MenuItem_Click(object sender, RoutedEventArgs e)
         {
+            exitbool = true;
             System.Windows.Application.Current.Shutdown();
         }
 
