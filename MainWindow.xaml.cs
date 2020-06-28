@@ -242,7 +242,7 @@ namespace osu_MusicPlayer
             //タスクトレイに表示
             notifyIcon.Visible = true;
 
-            notifyIcon.MouseClick += new MouseEventHandler(notifyIcon_click);
+            notifyIcon.MouseDoubleClick += new MouseEventHandler(notifyIcon_click);
         }
 
         //notifyIconプレイリスト登録
