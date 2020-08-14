@@ -2,8 +2,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.Eventing.Reader;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography.X509Certificates;
 using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Threading;
@@ -31,6 +33,7 @@ namespace osu_MusicPlayer
         ToolStripMenuItem toolStripPlay = new ToolStripMenuItem();
         ToolStripMenuItem toolStripNext = new ToolStripMenuItem();
         ToolStripMenuItem toolStripPlaylist = new ToolStripMenuItem();
+        ToolStripMenuItem toolStriBlackList = new ToolStripMenuItem();
         ToolStripMenuItem toolStripExit = new ToolStripMenuItem();
 
 
@@ -55,13 +58,20 @@ namespace osu_MusicPlayer
         List<string> PlaylistTitle = new List<string>();
         List<string> PlaylistArtist = new List<string>();
 
+        int NowPlay;
+
+        //ヒストリーとネクスト
         List<int> PlaylistHistory = new List<int>();
         List<int> PlaylistNext = new List<int>();
 
-        int NowPlay;
-
         List<int> PlayHistory = new List<int>();
         List<int> PlayNext = new List<int>();
+
+        //ランダム時用リスト
+        List<int> RandomHistory = new List<int>();
+
+        //ブラックリスト
+        List<string> BlackList = new List<string>();
 
         bool exitbool;
 
@@ -83,6 +93,7 @@ namespace osu_MusicPlayer
             toolStripPlay.Text = "Play";
             toolStripNext.Text = "Next";
             toolStripPlaylist.Text = "プレイリストに追加";
+            toolStriBlackList.Text = "ブラックリスト";
             toolStripExit.Text = "終了";
 
             menuStrip.Items.Add(toolStripTitle);
@@ -94,6 +105,8 @@ namespace osu_MusicPlayer
             toolStripControl.DropDownItems.Add(toolStripNext);
             menuStrip.Items.Add(new ToolStripSeparator());
             menuStrip.Items.Add(toolStripPlaylist);
+            toolStripPlaylist.DropDownItems.Add(toolStriBlackList);
+            toolStripPlaylist.DropDownItems.Add(new ToolStripSeparator());
             menuStrip.Items.Add(new ToolStripSeparator());
             menuStrip.Items.Add(toolStripExit);
 
@@ -128,6 +141,26 @@ namespace osu_MusicPlayer
             Debug.WriteLine(PlayerURL.Count + "曲");
 
 
+            //ブラックリストを読み込む
+            if (File.Exists(appPath + @"\blacklist"))
+            {
+                StreamReader streamReader = new StreamReader(appPath + @"\blacklist", System.Text.Encoding.UTF8);
+                var count1 = File.ReadLines(appPath + @"\blacklist").Count();
+
+                string[] triger = { ",/ " };
+
+                //各値に代入
+                for (int i = 0; i < count1; i++)
+                {
+                    string[] readtemp = streamReader.ReadLine().Split(triger, StringSplitOptions.None);
+                    BlackList.Add(readtemp[0]);
+                }
+                streamReader.Close();
+            }
+            
+            
+
+
             //プレイリストを読み込む
             PlaylistUpdate();
 
@@ -145,6 +178,57 @@ namespace osu_MusicPlayer
                 mediaPlayer.settings.volume = Settings.Default.volume;
                 Settings.Default.Save();
             };
+
+
+            //notifyicon表示
+            notifyIcon.Visible = true;
+
+            //バック
+            toolStripBack.Click += delegate
+            {
+                NewPlayBack();
+            };
+
+            //再生
+            toolStripPlay.Click += delegate
+            {
+                //再生していたら停止
+                if (mediaPlayer.playState == WMPPlayState.wmppsPlaying)
+                {
+                    mediaPlayer.controls.pause();
+                    Button_Play.Content = "Play";
+                    toolStripPlay.Text = "Play";
+                }
+                //一時停止だったら再生
+                else if (mediaPlayer.playState == WMPPlayState.wmppsPaused)
+                {
+                    mediaPlayer.controls.play();
+                    Button_Play.Content = "Pause";
+                    toolStripPlay.Text = "Pause";
+                }
+                //停止だったら再生
+                else
+                {
+                    SelectedNewPlaylist();
+                }
+            };
+
+            //スキップ
+            toolStripNext.Click += delegate
+            {
+                SelectedNewPlaylist();
+            };
+
+            //playlistクリック
+            toolStripPlaylist.DropDownItemClicked += ToolStripPlaylist_DropDownItemClicked;
+
+            //toolStripExitクリック
+            toolStripExit.Click += delegate
+            {
+                notifyIcon.Dispose();
+                System.Windows.Application.Current.Shutdown();
+            };
+
 
 
             //イベント発生300ms
@@ -175,13 +259,15 @@ namespace osu_MusicPlayer
                 //自動で次の曲を再生する
                 if (mediaPlayer.playState == WMPPlayState.wmppsStopped)
                 {
-                    SelectedNowPlaylist();
+                    SelectedNewPlaylist();
                 }
             };
 
             timer.Start();
         }
 
+
+        
 
         /// <summary>
         /// ×ボタンを押された時にタスクトレイに収納
@@ -204,62 +290,23 @@ namespace osu_MusicPlayer
             ShowInTaskbar = false;
             Visibility = Visibility.Collapsed;
 
-            //バック
-            toolStripBack.Click += delegate
-            {
-                NewPlayBack();
-            };
-
-            //再生
-            toolStripPlay.Click += delegate
-            {
-                if (mediaPlayer.playState == WMPPlayState.wmppsPlaying)
-                {
-                    mediaPlayer.controls.pause();
-                    Button_Play.Content = "Play";
-                    toolStripPlay.Text = "Play";
-                }
-                //一時停止だったら再生
-                else if (mediaPlayer.playState == WMPPlayState.wmppsPaused)
-                {
-                    mediaPlayer.controls.play();
-                    Button_Play.Content = "Pause";
-                    toolStripPlay.Text = "Pause";
-                }
-                //停止だったら再生
-                else
-                {
-                    SelectedNowPlaylist();
-                }
-            };
-
-            //スキップ
-            toolStripNext.Click += delegate
-            {
-                SelectedNowPlaylist();
-            };
-
-            //playlistクリック
-            toolStripPlaylist.DropDownItemClicked += ToolStripPlaylist_DropDownItemClicked;
-
-            //toolStripExitクリック
-            toolStripExit.Click += delegate
-            {
-                notifyIcon.Dispose();
-                System.Windows.Application.Current.Shutdown();
-            };
-
-            //タスクトレイに表示
-            notifyIcon.Visible = true;
-
-            notifyIcon.MouseDoubleClick += new MouseEventHandler(notifyIcon_click);
+            
+            //ダブルクリック
+            notifyIcon.MouseDoubleClick += new MouseEventHandler(notifyIcon_DoubleClick);
         }
+
 
         //notifyIconプレイリスト登録
         private void ToolStripPlaylist_DropDownItemClicked(object sender, ToolStripItemClickedEventArgs e)
         {
             if(Label_Title.Content.ToString() != "タイトル")
             {
+                if(e.ClickedItem.ToString() == "ブラックリスト")
+                {
+                    Add_blacklist();
+                }
+                else
+                {
                 string playlistindex = PlaylistURL.Find(x => x.Contains(mediaPlayer.URL));
                 if (playlistindex == null)
                 {
@@ -291,17 +338,19 @@ namespace osu_MusicPlayer
 
                     Debug.WriteLine("追加完了");
                 }
+
+                }
             } 
         }
+
 
         /// <summary>
         /// notifyiconを押したときのやつ
         /// </summary>
-        private void notifyIcon_click(object sender, System.Windows.Forms.MouseEventArgs e)
+        private void notifyIcon_DoubleClick(object sender, System.Windows.Forms.MouseEventArgs e)
         {
             if(e.Button == MouseButtons.Left)
             {
-                notifyIcon.Visible = false;
                 ShowInTaskbar = true;
                 Visibility = Visibility.Visible;
                 Topmost = true;
@@ -313,12 +362,12 @@ namespace osu_MusicPlayer
 
         ///<summary>
         ///new曲データ取得・セーブメソッド
-        ///取得したらプログラム内データも更新
         /// </summary>
         private void NewSaveMusic(string osuplayerFilePath)
         {
-            var messagebox = new messagebox();
-            messagebox.Show();
+            notifyIcon.BalloonTipTitle = "Osu!MusicPlayer";
+            notifyIcon.BalloonTipText = "曲を読み込んでいます。しばらくお待ちください。";
+            notifyIcon.ShowBalloonTip(3000);
 
             //譜面データをリストアップ
             IEnumerable<string> osuFiles = Directory.GetFiles(Settings.Default.osuURL, "*.osu", SearchOption.AllDirectories);
@@ -402,7 +451,7 @@ namespace osu_MusicPlayer
                 }   
             }
             streamWriter.Close();
-            messagebox.Close();
+
         }
 
 
@@ -436,6 +485,10 @@ namespace osu_MusicPlayer
                 SearchTags.Add(readtemp[5]);
             }
             streamReader.Close();
+
+            notifyIcon.BalloonTipTitle = "Osu!MusicPlayer";
+            notifyIcon.BalloonTipText = "曲を読み込みました。";
+            notifyIcon.ShowBalloonTip(3000);
         }
 
 
@@ -445,13 +498,13 @@ namespace osu_MusicPlayer
         /// </summary>
         public void NewPlayNext(int number, bool playlistbool)
         {
-            if(number > 0)
+            if(number != -1)
             {
                 if (playlistbool)
                 {
-                    if(MenuItem_Repeat.IsChecked == false)
+                    //プレイリスト
+                    if (MenuItem_Repeat.IsChecked == false)
                     {
-                        //プレイリスト
                         //PlayNextがあったらそれを読み込む
                         if (PlaylistNext.Count > 0)
                         {
@@ -464,18 +517,19 @@ namespace osu_MusicPlayer
                     }
 
 
-                    //URLをセットして曲を流す
+                    //URLをセット
                     NowPlay = number;
                     mediaPlayer.URL = PlaylistURL[number];
                     Label_Title.Content = PlaylistTitle[number];
                     Label_Artist.Content = PlaylistArtist[number];
 
+                    CheckBox_PLaylist.IsChecked = true;
                 }
                 else
                 {
+                    //普通の再生
                     if (MenuItem_Repeat.IsChecked == false)
                     {
-                        //普通の再生
                         //PlayNextがあったらそれを読み込む
                         if (PlayNext.Count > 0)
                         {
@@ -485,27 +539,27 @@ namespace osu_MusicPlayer
 
                         //PlayHistryにindexを追加する
                         PlayHistory.Add(number);
-
                     }
 
-                    //URLをセットして曲を流す
+                    //URLをセット
                     NowPlay = number;
 
                     mediaPlayer.URL = PlayerURL[number];
                     Label_Title.Content = PlayerTitle[number];
                     Label_Artist.Content = PlayerArtist[number];
 
-                    int index = PlaylistURL.FindIndex(x => x.Contains(mediaPlayer.URL));
-                    if (index == -1)
-                        CheckBox_PLaylist.IsChecked = false;
-                    else
-                        CheckBox_PLaylist.IsChecked = true;
                 }
-                
+
+                //randomhistoryに追加
+                RandomHistory.Add(number);
+
+                //再生
                 mediaPlayer.controls.play();
 
                 toolStripTitle.Text = Label_Title.Content.ToString();
                 toolStripArtist.Text = Label_Artist.Content.ToString();
+
+
 
                 Button_Play.Content = "Pause";
                 toolStripPlay.Text = "Pause";
@@ -595,18 +649,40 @@ namespace osu_MusicPlayer
             if (PlayerURL.Count == 0)
                 return -1;
 
+            //ランダムカウントリセット
+            if (RandomHistory.Count == Max)
+                RandomHistory.Clear();
+
             Random random = new Random();
             int index;
 
             if (MenuItem_Repeat.IsChecked == false)
             {
-                //同じ曲(曲名)だったらもう一度
+                //同じ曲(曲名) or 流したことある曲だったらもう一度
                 while (true)
                 {
                     index = random.Next(0, Max);
 
+                    //今再生しているか
                     if (Label_Title.Content.ToString() == PlayerTitle[index])
                         continue;
+
+                    //すでに再生されているか
+                    int Randomindex = RandomHistory.FindIndex(x => x == index);
+                    if(Randomindex != -1)
+                        continue;
+
+                    //ブラックリストが選択されているか
+                    if(SelectPlaylist != "blacklist")
+                    {
+                        int blackindex = BlackList.FindIndex(x => x.Contains(PlayerURL[index]));
+                        if (blackindex != -1)
+                        {
+                            //randomhistoryに追加
+                            RandomHistory.Add(index);
+                            continue;
+                        }
+                    }
 
                     break;
                 }
@@ -661,7 +737,7 @@ namespace osu_MusicPlayer
             Slider_Volume.Value = Settings.Default.volume;
         }
 
-        
+
         /// <summary>
         /// プレイリストファイルの更新
         /// </summary>
@@ -670,22 +746,42 @@ namespace osu_MusicPlayer
             //選択メニューに4つ以上あったらデフォの3つを残して消す
             int SelectItemCount = MenuItem_Select.Items.Count;
 
-            //元からあるのをコピーしclearした後に貼り付ける
-            Object[] menuitemselects = new Object[3];
+            //select元からあるのをコピーしclearした後に貼り付ける
+            Object[] menuitemselects = new Object[5];
             menuitemselects[0] = MenuItem_Select.Items[0];
             menuitemselects[1] = MenuItem_Select.Items[1];
             menuitemselects[2] = MenuItem_Select.Items[2];
+            menuitemselects[3] = MenuItem_Select.Items[3];
+            menuitemselects[4] = MenuItem_Select.Items[4];
+
+            //add
+            Object[] menuiteadd = new Object[2];
+            menuiteadd[0] = MenuItem_AddPlaylistMusic.Items[0];
+            menuiteadd[1] = MenuItem_AddPlaylistMusic.Items[1];
+
 
             //削除
             MenuItem_Select.Items.Clear();
             MenuItem_Delete.Items.Clear();
+            MenuItem_AddPlaylistMusic.Items.Clear();
             toolStripPlaylist.DropDownItems.Clear();
 
-            //貼り付け
+
+            //select貼り付け
             MenuItem_Select.Items.Add(menuitemselects[0]);
             MenuItem_Select.Items.Add(menuitemselects[1]);
             MenuItem_Select.Items.Add(menuitemselects[2]);
-            
+            MenuItem_Select.Items.Add(menuitemselects[3]);
+            MenuItem_Select.Items.Add(menuitemselects[4]);
+
+            //add
+            MenuItem_AddPlaylistMusic.Items.Add(menuiteadd[0]);
+            MenuItem_AddPlaylistMusic.Items.Add(menuiteadd[1]);
+
+            //notify
+            toolStripPlaylist.DropDownItems.Add(toolStriBlackList);
+            toolStripPlaylist.DropDownItems.Add(new ToolStripSeparator());
+
 
             //メニューに追加
             if (Directory.Exists(appPath + @"\Playlist"))
@@ -695,13 +791,21 @@ namespace osu_MusicPlayer
                 {
                     System.Windows.Controls.MenuItem AddMune = new System.Windows.Controls.MenuItem();
                     System.Windows.Controls.MenuItem delMune = new System.Windows.Controls.MenuItem();
+                    System.Windows.Controls.MenuItem PlayMune = new System.Windows.Controls.MenuItem();
+
+                    //読み込んでファイル名から拡張子を削除
                     string PlaylistString;
                     PlaylistString = t.Replace(appPath + @"\Playlist\", "");
                     PlaylistString = PlaylistString.Replace(".Playlist", "");
                     AddMune.Header = PlaylistString;
                     delMune.Header = PlaylistString;
+                    PlayMune.Header = PlaylistString;
+
+                    //追加
                     MenuItem_Select.Items.Add(AddMune);
                     MenuItem_Delete.Items.Add(delMune);
+                    MenuItem_AddPlaylistMusic.Items.Add(PlayMune);
+
                     toolStripPlaylist.DropDownItems.Add(PlaylistString);
                     toolStripPlaylist.Enabled = true;
                     MenuItem_Delete.IsEnabled = true;
@@ -717,7 +821,19 @@ namespace osu_MusicPlayer
             else
             {
                 MenuItem_Delete.IsEnabled = false;
-                toolStripPlaylist.Enabled = false;
+            }
+
+
+            //ブラックリストがなかったら選べないように
+            if (File.Exists(appPath + @"\blacklist"))
+            {
+                MenuItem_select_BlackList.IsEnabled = true;
+                Debug.WriteLine("aru");
+            }
+            else
+            {
+                MenuItem_select_BlackList.IsEnabled = false;
+                Debug.WriteLine("nai");
             }
         }
 
@@ -725,7 +841,7 @@ namespace osu_MusicPlayer
         /// <summary>
         /// 再生時に関するプレイリストの挙動
         /// </summary>
-        private void SelectedNowPlaylist()
+        private void SelectedNewPlaylist()
         {
             if (SelectPlaylist == null)
             {
@@ -735,26 +851,20 @@ namespace osu_MusicPlayer
             else
             {
                 NewPlayNext(NewNextIndex(PlaylistURL.Count), true);
-
-                int index = PlaylistURL.FindIndex(x => x.Contains(mediaPlayer.URL));
-                if (index == -1)
-                    CheckBox_PLaylist.IsChecked = false;
-                else
-                    CheckBox_PLaylist.IsChecked = true;
             }
 
 
         }
 
 
-        //windowでの処理------------------------------------------------------------------------------------
+        //ウィンドウでの処理------------------------------------------------------------------------------------
 
         /// <summary>
         /// スキップ
         /// </summary>
         private void Button_Next_Click(object sender, RoutedEventArgs e)
         {
-            SelectedNowPlaylist();
+            SelectedNewPlaylist();
         }
 
 
@@ -780,7 +890,7 @@ namespace osu_MusicPlayer
             //停止だったら再生
             else
             {
-                SelectedNowPlaylist();
+                SelectedNewPlaylist();
             }
         }
 
@@ -800,16 +910,53 @@ namespace osu_MusicPlayer
         private void CheckBox_PLaylist_Checked(object sender, RoutedEventArgs e)
         {
             if (SelectPlaylist == null || Label_Title.Content.ToString() == "タイトル")
+            {
                 CheckBox_PLaylist.IsChecked = false;
+                return;
+            }
             else
             {
-                if(CheckBox_PLaylist.IsChecked == true)
+                //ブラックリスト分
+                if (SelectPlaylist == "blacklist")
+                {
+                    string playlistindex = PlaylistURL.Find(x => x.Contains(mediaPlayer.URL));
+                    if (playlistindex == null)
+                    {
+                        //追加
+                        StreamWriter streamWriter = new StreamWriter((appPath + @"\blacklist"), true, System.Text.Encoding.UTF8);
+                        streamWriter.WriteLine("{0},/ {1},/ {2}", mediaPlayer.URL, Label_Title.Content, Label_Artist.Content);
+                        streamWriter.Close();
+
+                        //初期化
+                        PlaylistURL.Clear();
+                        PlaylistTitle.Clear();
+                        PlaylistArtist.Clear();
+
+
+                        StreamReader streamReader = new StreamReader((appPath + @"\blacklist"), System.Text.Encoding.UTF8);
+                        var count = File.ReadLines((appPath + @"\blacklist")).Count();
+
+                        string[] triger = { ",/ " };
+
+                        //各値に代入
+                        for (int i = 0; i < count; i++)
+                        {
+                            string[] readtemp = streamReader.ReadLine().Split(triger, StringSplitOptions.None);
+                            PlaylistURL.Add(readtemp[0]);
+                            PlaylistTitle.Add(readtemp[1]);
+                            PlaylistArtist.Add(readtemp[2]);
+                        }
+                        streamReader.Close();
+
+                        Debug.WriteLine("ブラックリストに追加完了");
+                    }
+                }else if (CheckBox_PLaylist.IsChecked == true)
                 {
                     //登録
                     string playlistindex = PlaylistURL.Find(x => x.Contains(mediaPlayer.URL));
                     if (playlistindex == null)
                     {
-
+                        //追加
                         StreamWriter streamWriter = new StreamWriter(appPath + @"\Playlist\" + SelectPlaylist + @".Playlist", true, System.Text.Encoding.UTF8);
                         streamWriter.WriteLine("{0},/ {1},/ {2}", mediaPlayer.URL, Label_Title.Content, Label_Artist.Content);
                         streamWriter.Close();
@@ -902,18 +1049,20 @@ namespace osu_MusicPlayer
 
             if (result == MessageBoxResult.Yes)
             {
+                WindowState = WindowState.Minimized;
+
                 //曲をセーブしてから読み込みなおす
                 try
                 {
                     NewSaveMusic(textfilePath);
                     NewReadMusic(textfilePath);
-
-                    System.Windows.MessageBox.Show("読み込みが終わりました。", "メッセージ", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 catch (Exception)
                 {
                     System.Windows.MessageBox.Show("エラーが起きました。", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
+
+                WindowState = WindowState.Normal;
             }
         }
 
@@ -923,7 +1072,7 @@ namespace osu_MusicPlayer
         /// </summary>
         private void MenuItem_Click_2(object sender, RoutedEventArgs e)
         {
-            System.Windows.MessageBox.Show("Osu! Music Player\r\nversion: 0.5.3\r\n制作: pantyetta", "アプリについて");
+            System.Windows.MessageBox.Show("Osu! Music Player\r\nversion: 0.6.1\r\n制作: pantyetta", "アプリについて");
         }
 
 
@@ -1118,6 +1267,74 @@ namespace osu_MusicPlayer
             PlaylistUpdate();
         }
 
+        /// <summary>
+        /// プレイリスト曲追加
+        /// </summary>
+        private void MenuItem_AddPlaylistMusic_Click(object sender, RoutedEventArgs e)
+        {
+            string[] triger1 = { " Header:" };
+            string[] triger2 = { " Items.Count:" };
+            string test = e.Source.ToString();
+            string[] name;
+            string[] header;
+            List<string> addPlaylistMusic = new List<string>();
+
+            name = test.Split(triger1, StringSplitOptions.None);
+
+            header = name[1].Split(triger2, StringSplitOptions.None);
+
+            if (header[0] == "ブラックリスト")
+                return;
+
+                StreamReader streamReader1 = new StreamReader(appPath + @"\Playlist\" + header[0] + @".Playlist", System.Text.Encoding.UTF8);
+                var count1 = File.ReadLines(appPath + @"\Playlist\" + header[0] + @".Playlist").Count();
+
+                string[] triger = { ",/ " };
+
+                //各値に代入
+                for (int i = 0; i < count1; i++)
+                {
+                    string[] readtemp = streamReader1.ReadLine().Split(triger, StringSplitOptions.None);
+                    addPlaylistMusic.Add(readtemp[0]);
+                }
+                streamReader1.Close();
+
+
+                //登録
+                string playlistindex = addPlaylistMusic.Find(x => x.Contains(mediaPlayer.URL));
+                if (playlistindex == null)
+                {
+                    //追加
+
+                    StreamWriter streamWriter = new StreamWriter(appPath + @"\Playlist\" + header[0] + @".Playlist", true, System.Text.Encoding.UTF8);
+                    streamWriter.WriteLine("{0},/ {1},/ {2}", mediaPlayer.URL, Label_Title.Content, Label_Artist.Content);
+                    streamWriter.Close();
+
+                    //初期化
+                    PlaylistURL.Clear();
+                    PlaylistTitle.Clear();
+                    PlaylistArtist.Clear();
+
+                    StreamReader streamReader = new StreamReader(appPath + @"\Playlist\" + header[0] + @".Playlist", System.Text.Encoding.UTF8);
+                    var count = File.ReadLines(appPath + @"\Playlist\" + header[0] + @".Playlist").Count();
+
+                    //各値に代入
+                    for (int i = 0; i < count; i++)
+                    {
+                        string[] readtemp = streamReader.ReadLine().Split(triger, StringSplitOptions.None);
+                        PlaylistURL.Add(readtemp[0]);
+                        PlaylistTitle.Add(readtemp[1]);
+                        PlaylistArtist.Add(readtemp[2]);
+                    }
+                    streamReader.Close();
+
+                    Debug.WriteLine(header[0] + "に追加完了");
+                }
+                else
+                    Debug.WriteLine("すでに入っています。");
+                
+        }
+
 
         /// <summary>
         /// プレイリストを選択する
@@ -1139,15 +1356,22 @@ namespace osu_MusicPlayer
             {
                 SelectPlaylist = null;
                 CheckBox_PLaylist.IsChecked = false;
+                //設定初期化
                 PlaylistURL.Clear();
                 PlaylistTitle.Clear();
                 PlaylistArtist.Clear();
+                //ランダムカウントリセット
+                RandomHistory.Clear();
                 Debug.WriteLine("選択解除");
                 return;
             }
 
             if (header[0] == "追加...")
                 return;
+
+            if (header[0] == "ブラックリスト")
+                return;
+
 
             //初期化
             PlaylistURL.Clear();
@@ -1166,6 +1390,8 @@ namespace osu_MusicPlayer
 
             string[] triger3 = { ",/ " };
 
+            Boolean checkflag = false;
+
             //各値に代入
             for (int i = 0; i < count; i++)
             {
@@ -1175,10 +1401,18 @@ namespace osu_MusicPlayer
                 PlaylistArtist.Add(readtemp[2]);
 
                 if (mediaPlayer.URL == readtemp[0])
-                    CheckBox_PLaylist.IsChecked = true;
+                    checkflag = true;
 
             }
             streamReader.Close();
+
+            //ランダムカウントリセット
+            RandomHistory.Clear();
+
+            if (checkflag)
+                CheckBox_PLaylist.IsChecked = true;
+            else
+                CheckBox_PLaylist.IsChecked = false;
 
             SelectPlaylist = header[0];
 
@@ -1218,6 +1452,104 @@ namespace osu_MusicPlayer
                 MenuItem_Repeat.IsChecked = true;
             else
                 MenuItem_Repeat.IsChecked = false;
+        }
+
+
+        /// <summary>
+        /// ブラックリスト選択
+        /// </summary>
+        private void MenuItem_select_BlackList_Click(object sender, RoutedEventArgs e)
+        {
+            //初期化
+            PlaylistURL.Clear();
+            PlaylistTitle.Clear();
+            PlaylistArtist.Clear();
+            PlaylistHistory.Clear();
+            PlaylistNext.Clear();
+
+
+            StreamReader streamReader = new StreamReader(appPath + @"\blacklist", System.Text.Encoding.UTF8);
+            var count = File.ReadLines(appPath + @"\blacklist").Count();
+
+            string[] triger3 = { ",/ " };
+
+            Boolean checkflag = false;
+
+            //各値に代入
+            for (int i = 0; i < count; i++)
+            {
+                string[] readtemp = streamReader.ReadLine().Split(triger3, StringSplitOptions.None);
+                PlaylistURL.Add(readtemp[0]);
+                PlaylistTitle.Add(readtemp[1]);
+                PlaylistArtist.Add(readtemp[2]);
+
+                if (mediaPlayer.URL == readtemp[0])
+                    checkflag = true;
+
+            }
+            streamReader.Close();
+
+            //ランダムカウントリセット
+            RandomHistory.Clear();
+
+            if (checkflag)
+                CheckBox_PLaylist.IsChecked = true;
+            else
+                CheckBox_PLaylist.IsChecked = false;
+
+            SelectPlaylist = "blacklist";
+
+            Debug.WriteLine("ブラックリストを選択中");
+        }
+        
+        
+        /// <summary>
+        /// ブラックリストに追加
+        /// </summary>
+        private void MenuItem_Add_BlackList_Click(object sender, RoutedEventArgs e)
+        {
+            Add_blacklist();
+        }
+
+
+        /// <summary>
+        /// ブラックリストに曲追加
+        /// </summary>
+        private void Add_blacklist()
+        {
+            if(mediaPlayer.playState == WMPPlayState.wmppsStopped)
+                return;
+
+            //登録
+            string playlistindex = BlackList.Find(x => x.Contains(mediaPlayer.URL));
+            if (playlistindex == null)
+            {
+                //追加
+                StreamWriter streamWriter = new StreamWriter(appPath + @"\blacklist", true, System.Text.Encoding.UTF8);
+                streamWriter.WriteLine("{0},/ {1},/ {2}", mediaPlayer.URL, Label_Title.Content, Label_Artist.Content);
+                streamWriter.Close();
+
+                BlackList.Clear();
+
+                StreamReader streamReader = new StreamReader(appPath + @"\blacklist", System.Text.Encoding.UTF8);
+                var count = File.ReadLines(appPath + @"\blacklist").Count();
+
+                string[] triger = { ",/ " };
+
+                //blacklist更新
+                for (int i = 0; i < count; i++)
+                {
+                    string[] readtemp = streamReader.ReadLine().Split(triger, StringSplitOptions.None);
+                    BlackList.Add(readtemp[0]);
+                }
+                streamReader.Close();
+
+                PlaylistUpdate();
+
+                Debug.WriteLine("ブラックリストに追加完了");
+            }
+            else
+                Debug.WriteLine("すでに入っています。");
         }
     }
 }

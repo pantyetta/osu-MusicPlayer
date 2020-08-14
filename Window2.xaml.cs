@@ -9,8 +9,6 @@ namespace osu_MusicPlayer
     /// </summary>
     public partial class Window2 : Window
     {
-        MainWindow mainWindow = new MainWindow();
-
         public Window2()
         {
             InitializeComponent();
