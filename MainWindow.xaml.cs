@@ -1,11 +1,11 @@
-﻿using DiscordRPC;
-using DiscordRPC.Logging;
-using osu_MusicPlayer.Properties;
+﻿using osu_MusicPlayer.Properties;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.Eventing.Reader;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography.X509Certificates;
 using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Threading;
@@ -73,10 +73,6 @@ namespace osu_MusicPlayer
         //ブラックリスト
         List<string> BlackList = new List<string>();
 
-        //DiscordRPC設定
-        Discord discord = new Discord();
-        bool discordflag;
-
         bool exitbool;
 
         public MainWindow()
@@ -118,24 +114,14 @@ namespace osu_MusicPlayer
 
             exitbool = false;
 
-            discordflag = false;
-
-
             //色々設定
             textfilePath = appPath + @"\music.osuplayer";
 
             MenuItem_Delete.IsEnabled = false;
 
-            if (Settings.Default.osuURL == "")
+            while (Settings.Default.osuURL == "")
             {
-                SetosuPath(); 
-                if (Settings.Default.osuURL == "")
-                {
-                    exitbool = true;
-                    System.Windows.MessageBox.Show("もう一度起動の上、正しいパスを入力してください。", "警告", MessageBoxButton.OK, MessageBoxImage.Error);
-                    System.Windows.Application.Current.Shutdown();
-                    return;
-                }
+                SetosuPath();
             }
 
 
@@ -206,7 +192,25 @@ namespace osu_MusicPlayer
             //再生
             toolStripPlay.Click += delegate
             {
-                Playmethod();
+                //再生していたら停止
+                if (mediaPlayer.playState == WMPPlayState.wmppsPlaying)
+                {
+                    mediaPlayer.controls.pause();
+                    Button_Play.Content = "Play";
+                    toolStripPlay.Text = "Play";
+                }
+                //一時停止だったら再生
+                else if (mediaPlayer.playState == WMPPlayState.wmppsPaused)
+                {
+                    mediaPlayer.controls.play();
+                    Button_Play.Content = "Pause";
+                    toolStripPlay.Text = "Pause";
+                }
+                //停止だったら再生
+                else
+                {
+                    SelectedNewPlaylist();
+                }
             };
 
             //スキップ
@@ -222,8 +226,6 @@ namespace osu_MusicPlayer
             toolStripExit.Click += delegate
             {
                 notifyIcon.Dispose();
-                if (discordflag == true)
-                    discord.Deinitialize();
                 System.Windows.Application.Current.Shutdown();
             };
 
@@ -310,7 +312,7 @@ namespace osu_MusicPlayer
                 {
 
                     StreamWriter streamWriter = new StreamWriter(appPath + @"\Playlist\" + e.ClickedItem + @".Playlist", true, System.Text.Encoding.UTF8);
-                    streamWriter.WriteLine("{0},/ {1},/ {2}", mediaPlayer.URL.Replace(Settings.Default.osuURL, ""), Label_Title.Content, Label_Artist.Content);
+                    streamWriter.WriteLine("{0},/ {1},/ {2}", mediaPlayer.URL, Label_Title.Content, Label_Artist.Content);
                     streamWriter.Close();
 
                     //初期化
@@ -363,115 +365,92 @@ namespace osu_MusicPlayer
         /// </summary>
         private void NewSaveMusic(string osuplayerFilePath)
         {
-            if (Directory.Exists(Settings.Default.osuURL))
+            notifyIcon.BalloonTipTitle = "Osu!MusicPlayer";
+            notifyIcon.BalloonTipText = "曲を読み込んでいます。しばらくお待ちください。";
+            notifyIcon.ShowBalloonTip(3000);
+
+            //譜面データをリストアップ
+            IEnumerable<string> osuFiles = Directory.GetFiles(Settings.Default.osuURL, "*.osu", SearchOption.AllDirectories);
+
+            StreamWriter streamWriter = new StreamWriter(osuplayerFilePath, false, System.Text.Encoding.UTF8);
+
+            //bool mapflag;
+
+            //内容読み込む？
+            foreach (string osufile in osuFiles)
             {
-                notifyIcon.BalloonTipTitle = "Osu!MusicPlayer";
-                notifyIcon.BalloonTipText = "曲を読み込んでいます。しばらくお待ちください。";
-                notifyIcon.ShowBalloonTip(3000);
 
-                //譜面データをリストアップ
-                IEnumerable<string> osuFiles = Directory.GetFiles(Settings.Default.osuURL, "*.osu", SearchOption.AllDirectories);
+                bool mapflag = true;
 
-                StreamWriter streamWriter = new StreamWriter(osuplayerFilePath, false, System.Text.Encoding.UTF8);
-                string urltmp;
+                string[] beatmap = new string[6];
+                beatmap[2] = "";
+                beatmap[4] = "";
+                beatmap[5] = "";
 
-                //bool mapflag;
+                StreamReader streamReader = new StreamReader(osufile);
 
-                //内容読み込む？
-                foreach (string osufile in osuFiles)
+                //Artistまで1行ずつ読み込む
+                while (mapflag)
                 {
+                    string temp = streamReader.ReadLine();
 
-                    bool mapflag = true;
-
-                    string[] beatmap = new string[7];
-                    beatmap[2] = "";
-                    beatmap[4] = "";
-                    beatmap[5] = "";
-
-                    StreamReader streamReader = new StreamReader(osufile);
-
-                    //Artistまで1行ずつ読み込む
-                    while (mapflag)
+                    if (temp.Contains("AudioFilename:"))
                     {
-                        string temp = streamReader.ReadLine();
-
-                        if (temp.Contains("AudioFilename:"))
-                        {
-                            urltmp = Path.GetDirectoryName(osufile) + @"\" + temp.Remove(0, 14).Trim();
-                            beatmap[0] = urltmp.Replace(Settings.Default.osuURL, "");
-                            continue;
-                        }
-                        else if (temp.Contains("Title:"))
-                        {
-                            beatmap[1] = temp.Remove(0, 6);
-                            continue;
-                        }
-                        else if (temp.Contains("TitleUnicode:"))
-                        {
-                            beatmap[2] = temp.Remove(0, 13);
-                            continue;
-                        }
-                        else if (temp.Contains("Artist:"))
-                        {
-                            beatmap[3] = temp.Remove(0, 7);
-                            continue;
-                        }
-                        else if (temp.Contains("ArtistUnicode:"))
-                        {
-                            beatmap[4] = temp.Remove(0, 14);
-                            continue;
-                        }
-                        else if (temp.Contains("Version:"))
-                        {
-                            beatmap[6] = temp.Remove(0, 8);
-                            continue;
-                        }
-                        else if (temp.Contains("Tags:"))
-                        {
-                            beatmap[5] = temp.Remove(0, 5);
-                            continue;
-                        }
-                        else if (temp.Contains("[Difficulty]"))
-                        {
-                            mapflag = false;
-                            continue;
-                        }
+                        beatmap[0] = Path.GetDirectoryName(osufile) + @"\" + temp.Remove(0, 14).Trim();
+                        continue;
                     }
-
-                    if (beatmap[2] == "")
-                        beatmap[2] = beatmap[1];
-
-                    if (beatmap[4] == "")
-                        beatmap[4] = beatmap[3];
-
-
-                    if (PlayerURL.LastOrDefault() != beatmap[0])
+                    else if (temp.Contains("Title:"))
                     {
-                        if (PlayerTitle.LastOrDefault() == beatmap[2])
-                        {
-                            //違うmp3同じタイトル
-                            streamWriter.WriteLine("{0},/ {1},/ {2},/ {3},/ {4},/ {5}", beatmap[0], beatmap[1] + " - " + beatmap[6], beatmap[2] + " - " + beatmap[6], beatmap[3], beatmap[4], beatmap[5]);
-                            PlayerURL.Add(beatmap[0]);
-                            PlayerTitle.Add(beatmap[2]);
-                        }
-                        else
-                        {
-                            //違うmp3違うタイトル
-                            streamWriter.WriteLine("{0},/ {1},/ {2},/ {3},/ {4},/ {5}", beatmap[0], beatmap[1], beatmap[2], beatmap[3], beatmap[4], beatmap[5]);
-                            PlayerURL.Add(beatmap[0]);
-                            PlayerTitle.Add(beatmap[2]);
-                        }
+                        beatmap[1] = temp.Remove(0, 6);
+                        continue;
+                    }
+                    else if (temp.Contains("TitleUnicode:"))
+                    {
+                        beatmap[2] = temp.Remove(0, 13);
+                        continue;
+                    }
+                    else if (temp.Contains("Artist:"))
+                    {
+                        beatmap[3] = temp.Remove(0, 7);
+                        continue;
+                    }
+                    else if (temp.Contains("ArtistUnicode:"))
+                    {
+                        beatmap[4] = temp.Remove(0, 14);
+                        continue;
+                    }
+                    else if (temp.Contains("Tags:"))
+                    {
+                        beatmap[5] = temp.Remove(0, 5);
+                        continue;
+                    }
+                    else if (temp.Contains("[Difficulty]"))
+                    {
+                        mapflag = false;
+                        continue;
                     }
                 }
-                streamWriter.Close();
 
-            }
-            else
-            {
-                System.Windows.MessageBox.Show("Osu! Music Player\r\nversion: 0.7.1\r\n制作: pantyetta", "アプリについて");
-            }
+                if (beatmap[2] == "")
+                    beatmap[2] = beatmap[1];
 
-            
+                if (beatmap[4] == "")
+                    beatmap[4] = beatmap[3];
+
+
+                if (PlayerURL.LastOrDefault() != beatmap[0])
+                {
+                    streamWriter.WriteLine("{0},/ {1},/ {2},/ {3},/ {4},/ {5}", beatmap[0], beatmap[1], beatmap[2], beatmap[3], beatmap[4], beatmap[5]);
+                    PlayerURL.Add(beatmap[0]);
+                    SearchTitle.Add(beatmap[1]);
+                    PlayerTitle.Add(beatmap[2]);
+                    SearchArtist.Add(beatmap[3]);
+                    PlayerArtist.Add(beatmap[4]);
+                    SearchTags.Add(beatmap[5]);
+
+                }   
+            }
+            streamWriter.Close();
 
         }
 
@@ -481,43 +460,35 @@ namespace osu_MusicPlayer
         /// </summary>
         public void NewReadMusic(string osuplayerFilePath)
         {
-            if (File.Exists(osuplayerFilePath))
+            StreamReader streamReader = new StreamReader(osuplayerFilePath, System.Text.Encoding.UTF8);
+            var count = File.ReadLines(osuplayerFilePath).Count();
+
+            string[] triger = { ",/ " };
+
+            //値の初期化
+            PlayerURL.Clear();
+            SearchTitle.Clear();
+            PlayerTitle.Clear();
+            SearchArtist.Clear();
+            PlayerArtist.Clear();
+            SearchTags.Clear();
+
+            //各値に代入
+            for (int i = 0; i < count; i++)
             {
-                StreamReader streamReader = new StreamReader(osuplayerFilePath, System.Text.Encoding.UTF8);
-                var count = File.ReadLines(osuplayerFilePath).Count();
-
-                string[] triger = { ",/ " };
-
-                //値の初期化
-                PlayerURL.Clear();
-                SearchTitle.Clear();
-                PlayerTitle.Clear();
-                SearchArtist.Clear();
-                PlayerArtist.Clear();
-                SearchTags.Clear();
-                RandomHistory.Clear();
-
-                //各値に代入
-                for (int i = 0; i < count; i++)
-                {
-                    string[] readtemp = streamReader.ReadLine().Split(triger, StringSplitOptions.None);
-                    PlayerURL.Add(readtemp[0]);
-                    SearchTitle.Add(readtemp[1]);
-                    PlayerTitle.Add(readtemp[2]);
-                    SearchArtist.Add(readtemp[3]);
-                    PlayerArtist.Add(readtemp[4]);
-                    SearchTags.Add(readtemp[5]);
-                }
-                streamReader.Close();
-
-                notifyIcon.BalloonTipTitle = "Osu!MusicPlayer";
-                notifyIcon.BalloonTipText = "曲を読み込みました。";
-                notifyIcon.ShowBalloonTip(3000);
+                string[] readtemp = streamReader.ReadLine().Split(triger, StringSplitOptions.None);
+                PlayerURL.Add(readtemp[0]);
+                SearchTitle.Add(readtemp[1]);
+                PlayerTitle.Add(readtemp[2]);
+                SearchArtist.Add(readtemp[3]);
+                PlayerArtist.Add(readtemp[4]);
+                SearchTags.Add(readtemp[5]);
             }
-            else
-            {
-                System.Windows.MessageBox.Show("曲データがありません。曲更新をして取得してください。", "警告", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            streamReader.Close();
+
+            notifyIcon.BalloonTipTitle = "Osu!MusicPlayer";
+            notifyIcon.BalloonTipText = "曲を読み込みました。";
+            notifyIcon.ShowBalloonTip(3000);
         }
 
 
@@ -548,23 +519,11 @@ namespace osu_MusicPlayer
 
                     //URLをセット
                     NowPlay = number;
-                    mediaPlayer.URL = Settings.Default.osuURL + PlaylistURL[number];
+                    mediaPlayer.URL = PlaylistURL[number];
                     Label_Title.Content = PlaylistTitle[number];
                     Label_Artist.Content = PlaylistArtist[number];
 
-                    //discordRPC更新
-                    if(discordflag == false)
-                    {
-                        discord.Initialize(PlaylistTitle[number], PlaylistArtist[number]);
-                        discordflag = true;
-                    }
-                    else
-                    {
-                        discord.Update(PlaylistTitle[number], PlaylistArtist[number]);
-                    }
-
                     CheckBox_PLaylist.IsChecked = true;
-                    Debug.WriteLine(PlaylistURL[number]);
                 }
                 else
                 {
@@ -585,22 +544,10 @@ namespace osu_MusicPlayer
                     //URLをセット
                     NowPlay = number;
 
-                    mediaPlayer.URL = Settings.Default.osuURL + PlayerURL[number];
+                    mediaPlayer.URL = PlayerURL[number];
                     Label_Title.Content = PlayerTitle[number];
                     Label_Artist.Content = PlayerArtist[number];
 
-                    //discordRPC更新
-                    if (discordflag == false)
-                    {
-                        discord.Initialize(PlayerTitle[number], PlayerArtist[number]);
-                        discordflag = true;
-                    }
-                    else
-                    {
-                        discord.Update(PlayerTitle[number], PlayerArtist[number]);
-                    }
-
-                    Debug.WriteLine(PlayerURL[number]);
                 }
 
                 //randomhistoryに追加
@@ -612,9 +559,12 @@ namespace osu_MusicPlayer
                 toolStripTitle.Text = Label_Title.Content.ToString();
                 toolStripArtist.Text = Label_Artist.Content.ToString();
 
+
+
                 Button_Play.Content = "Pause";
                 toolStripPlay.Text = "Pause";
 
+                Debug.WriteLine(PlayerURL[number]);
             }
         }
 
@@ -627,7 +577,6 @@ namespace osu_MusicPlayer
         {
             if (SelectPlaylist == null)
             {
-                //普通の再生
                 if (PlayHistory.Count > 1)
                 {
 
@@ -643,28 +592,22 @@ namespace osu_MusicPlayer
 
                     //URLをセットして曲を流す
                     NowPlay = number;
-                    mediaPlayer.URL = Settings.Default.osuURL + PlayerURL[number];
+                    mediaPlayer.URL = PlayerURL[number];
                     Label_Title.Content = PlayerTitle[number];
                     Label_Artist.Content = PlayerArtist[number];
+                    mediaPlayer.controls.play();
 
+                    toolStripTitle.Text = Label_Title.Content.ToString();
+                    toolStripArtist.Text = Label_Artist.Content.ToString();
 
-                    //discordRPC更新
-                    if (discordflag == false)
-                    {
-                        discord.Initialize(PlayerTitle[number], PlayerArtist[number]);
-                        discordflag = true;
-                    }
-                    else
-                    {
-                        discord.Update(PlayerTitle[number], PlayerArtist[number]);
-                    }
+                    Button_Play.Content = "Pause";
+                    toolStripPlay.Text = "Pause";
 
                     Debug.WriteLine(PlayerURL[number]);
                 }
             }
             else
             {
-                //プレイリスト
                 if (PlaylistHistory.Count > 1)
                 {
                     //変数の定義
@@ -679,32 +622,20 @@ namespace osu_MusicPlayer
     
                     //URLをセットして曲を流す
                     NowPlay = number;
-                    mediaPlayer.URL = Settings.Default.osuURL + PlaylistURL[number];
+                    mediaPlayer.URL = PlaylistURL[number];
                     Label_Title.Content = PlaylistTitle[number];
                     Label_Artist.Content = PlaylistArtist[number];
+                    mediaPlayer.controls.play();
 
-                    //discordRPC更新
-                    if (discordflag == false)
-                    {
-                        discord.Initialize(PlaylistTitle[number], PlaylistArtist[number]);
-                        discordflag = true;
-                    }
-                    else
-                    {
-                        discord.Update(PlaylistTitle[number], PlaylistArtist[number]);
-                    }
+                    toolStripTitle.Text = Label_Title.Content.ToString();
+                    toolStripArtist.Text = Label_Artist.Content.ToString();
+
+                    Button_Play.Content = "Pause";
+                    toolStripPlay.Text = "Pause";
 
                     Debug.WriteLine(PlaylistURL[number]);
                 }
             }
-
-            mediaPlayer.controls.play();
-
-            toolStripTitle.Text = Label_Title.Content.ToString();
-            toolStripArtist.Text = Label_Artist.Content.ToString();
-
-            Button_Play.Content = "Pause";
-            toolStripPlay.Text = "Pause";
         }
 
 
@@ -718,6 +649,10 @@ namespace osu_MusicPlayer
             if (PlayerURL.Count == 0)
                 return -1;
 
+            //ランダムカウントリセット
+            if (RandomHistory.Count == Max)
+                RandomHistory.Clear();
+
             Random random = new Random();
             int index;
 
@@ -726,10 +661,6 @@ namespace osu_MusicPlayer
                 //同じ曲(曲名) or 流したことある曲だったらもう一度
                 while (true)
                 {
-                    //ランダムカウントリセット
-                    if (RandomHistory.Count == Max)
-                        RandomHistory.Clear();
-
                     index = random.Next(0, Max);
 
                     //今再生しているか
@@ -773,23 +704,23 @@ namespace osu_MusicPlayer
             folderBrowserDialog.Description = "osu!.exeがあるファイルを選択してください。";
             folderBrowserDialog.SelectedPath = @"C:";
 
-
             //ダイヤログを表示する
             if (folderBrowserDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
                 if (File.Exists(folderBrowserDialog.SelectedPath + @"\osu!.exe"))
                 {
                     Settings.Default.osuURL = folderBrowserDialog.SelectedPath + @"\Songs";
-
+                    
                     Debug.WriteLine("osuパス：" + Settings.Default.osuURL);
                 }
                 else
                 {
                     Settings.Default.osuURL = "";
                     System.Windows.MessageBox.Show("パスが違います。", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+
                 }
             }
-            
+
             Settings.Default.Save();
 
             folderBrowserDialog.Dispose();
@@ -897,12 +828,12 @@ namespace osu_MusicPlayer
             if (File.Exists(appPath + @"\blacklist"))
             {
                 MenuItem_select_BlackList.IsEnabled = true;
-                Debug.WriteLine("black-aru");
+                Debug.WriteLine("aru");
             }
             else
             {
                 MenuItem_select_BlackList.IsEnabled = false;
-                Debug.WriteLine("black-nai");
+                Debug.WriteLine("nai");
             }
         }
 
@@ -933,9 +864,6 @@ namespace osu_MusicPlayer
         /// </summary>
         private void Button_Next_Click(object sender, RoutedEventArgs e)
         {
-            if (Label_Title.Content.ToString() == "タイトル")
-                return;
-
             SelectedNewPlaylist();
         }
 
@@ -945,17 +873,9 @@ namespace osu_MusicPlayer
         /// </summary>
         private void Button_Play_Click(object sender, RoutedEventArgs e)
         {
-            Playmethod();
-        }
-
-
-        public void Playmethod()
-        {
-            //再生していたら一時停止
+            //再生していたら停止
             if (mediaPlayer.playState == WMPPlayState.wmppsPlaying)
             {
-                discord.Deinitialize();
-                discordflag = false;
                 mediaPlayer.controls.pause();
                 Button_Play.Content = "Play";
                 toolStripPlay.Text = "Play";
@@ -963,11 +883,6 @@ namespace osu_MusicPlayer
             //一時停止だったら再生
             else if (mediaPlayer.playState == WMPPlayState.wmppsPaused)
             {
-                if (discordflag == false)
-                {
-                    discord.Initialize(Label_Title.Content.ToString(), Label_Artist.Content.ToString());
-                    discordflag = true;
-                }
                 mediaPlayer.controls.play();
                 Button_Play.Content = "Pause";
                 toolStripPlay.Text = "Pause";
@@ -979,20 +894,18 @@ namespace osu_MusicPlayer
             }
         }
 
+
         /// <summary>
         /// 前の曲に戻る
         /// </summary>
         private void Button_Back_Click(object sender, RoutedEventArgs e)
         {
-            if (Label_Title.Content.ToString() == "タイトル")
-                return;
-
             NewPlayBack();
         }
 
 
         /// <summary>
-        /// プレイリストに曲を入れる(チェックボックス)
+        /// プレイリストに曲を入れる
         /// </summary>
         private void CheckBox_PLaylist_Checked(object sender, RoutedEventArgs e)
         {
@@ -1006,12 +919,12 @@ namespace osu_MusicPlayer
                 //ブラックリスト分
                 if (SelectPlaylist == "blacklist")
                 {
-                    string playlistindex = PlaylistURL.Find(x => x.Contains(mediaPlayer.URL.Replace(Settings.Default.osuURL, "")));
+                    string playlistindex = PlaylistURL.Find(x => x.Contains(mediaPlayer.URL));
                     if (playlistindex == null)
                     {
                         //追加
                         StreamWriter streamWriter = new StreamWriter((appPath + @"\blacklist"), true, System.Text.Encoding.UTF8);
-                        streamWriter.WriteLine("{0},/ {1},/ {2}", mediaPlayer.URL.Replace(Settings.Default.osuURL, ""), Label_Title.Content, Label_Artist.Content);
+                        streamWriter.WriteLine("{0},/ {1},/ {2}", mediaPlayer.URL, Label_Title.Content, Label_Artist.Content);
                         streamWriter.Close();
 
                         //初期化
@@ -1040,12 +953,12 @@ namespace osu_MusicPlayer
                 }else if (CheckBox_PLaylist.IsChecked == true)
                 {
                     //登録
-                    string playlistindex = PlaylistURL.Find(x => x.Contains(mediaPlayer.URL.Replace(Settings.Default.osuURL, "")));
+                    string playlistindex = PlaylistURL.Find(x => x.Contains(mediaPlayer.URL));
                     if (playlistindex == null)
                     {
                         //追加
                         StreamWriter streamWriter = new StreamWriter(appPath + @"\Playlist\" + SelectPlaylist + @".Playlist", true, System.Text.Encoding.UTF8);
-                        streamWriter.WriteLine("{0},/ {1},/ {2}", mediaPlayer.URL.Replace(Settings.Default.osuURL, ""), Label_Title.Content, Label_Artist.Content);
+                        streamWriter.WriteLine("{0},/ {1},/ {2}", mediaPlayer.URL, Label_Title.Content, Label_Artist.Content);
                         streamWriter.Close();
 
                         //初期化
@@ -1076,7 +989,7 @@ namespace osu_MusicPlayer
                 else
                 {
                     //削除
-                    int playlistindex = PlaylistURL.FindIndex(x => x.Contains(mediaPlayer.URL.Replace(Settings.Default.osuURL, "")));
+                    int playlistindex = PlaylistURL.FindIndex(x => x.Contains(mediaPlayer.URL));
                     PlaylistURL.RemoveAt(playlistindex);
                     PlaylistTitle.RemoveAt(playlistindex);
                     PlaylistArtist.RemoveAt(playlistindex);
@@ -1125,8 +1038,6 @@ namespace osu_MusicPlayer
         private void MenuItem_Click(object sender, RoutedEventArgs e)
         {
             exitbool = true;
-            if(discordflag == true)
-                discord.Deinitialize();
             System.Windows.Application.Current.Shutdown();
         }
 
@@ -1161,7 +1072,7 @@ namespace osu_MusicPlayer
         /// </summary>
         private void MenuItem_Click_2(object sender, RoutedEventArgs e)
         {
-            System.Windows.MessageBox.Show("Osu! Music Player\r\nversion: 0.7.1\r\n制作: pantyetta", "アプリについて");
+            System.Windows.MessageBox.Show("Osu! Music Player\r\nversion: 0.6.1\r\n制作: pantyetta", "アプリについて");
         }
 
 
@@ -1171,6 +1082,7 @@ namespace osu_MusicPlayer
         private void MenuItem_Click_3(object sender, RoutedEventArgs e)
         {
             SetosuPath();
+
         }
 
 
@@ -1205,7 +1117,7 @@ namespace osu_MusicPlayer
 
             window2.Show();
 
-            window2.Text.TextChanged += delegate
+            window2.Button_serch.Click += delegate
             {
                 window2.ListBox_Result.Items.Clear();
 
@@ -1291,7 +1203,6 @@ namespace osu_MusicPlayer
                 if(search != null)
                 {
                     string[] SearchTemp =  search.ToString().Split(triger, StringSplitOptions.RemoveEmptyEntries);
-                 
                     NewPlayNext(PlayerTitle.FindIndex(x => x.Contains(SearchTemp[0])), false);
                 }
             };
@@ -1390,13 +1301,13 @@ namespace osu_MusicPlayer
 
 
                 //登録
-                string playlistindex = addPlaylistMusic.Find(x => x.Contains(mediaPlayer.URL.Replace(Settings.Default.osuURL, "")));
+                string playlistindex = addPlaylistMusic.Find(x => x.Contains(mediaPlayer.URL));
                 if (playlistindex == null)
                 {
                     //追加
 
                     StreamWriter streamWriter = new StreamWriter(appPath + @"\Playlist\" + header[0] + @".Playlist", true, System.Text.Encoding.UTF8);
-                    streamWriter.WriteLine("{0},/ {1},/ {2}", mediaPlayer.URL.Replace(Settings.Default.osuURL, ""), Label_Title.Content, Label_Artist.Content);
+                    streamWriter.WriteLine("{0},/ {1},/ {2}", mediaPlayer.URL, Label_Title.Content, Label_Artist.Content);
                     streamWriter.Close();
 
                     //初期化
@@ -1461,6 +1372,7 @@ namespace osu_MusicPlayer
             if (header[0] == "ブラックリスト")
                 return;
 
+
             //初期化
             PlaylistURL.Clear();
             PlaylistTitle.Clear();
@@ -1488,7 +1400,7 @@ namespace osu_MusicPlayer
                 PlaylistTitle.Add(readtemp[1]);
                 PlaylistArtist.Add(readtemp[2]);
 
-                if (mediaPlayer.URL.Replace(Settings.Default.osuURL, "") == readtemp[0])
+                if (mediaPlayer.URL == readtemp[0])
                     checkflag = true;
 
             }
@@ -1571,7 +1483,7 @@ namespace osu_MusicPlayer
                 PlaylistTitle.Add(readtemp[1]);
                 PlaylistArtist.Add(readtemp[2]);
 
-                if (mediaPlayer.URL.Replace(Settings.Default.osuURL, "") == readtemp[0])
+                if (mediaPlayer.URL == readtemp[0])
                     checkflag = true;
 
             }
@@ -1609,12 +1521,12 @@ namespace osu_MusicPlayer
                 return;
 
             //登録
-            string playlistindex = BlackList.Find(x => x.Contains(mediaPlayer.URL.Replace(Settings.Default.osuURL, "")));
+            string playlistindex = BlackList.Find(x => x.Contains(mediaPlayer.URL));
             if (playlistindex == null)
             {
                 //追加
                 StreamWriter streamWriter = new StreamWriter(appPath + @"\blacklist", true, System.Text.Encoding.UTF8);
-                streamWriter.WriteLine("{0},/ {1},/ {2}", mediaPlayer.URL.Replace(Settings.Default.osuURL, ""), Label_Title.Content, Label_Artist.Content);
+                streamWriter.WriteLine("{0},/ {1},/ {2}", mediaPlayer.URL, Label_Title.Content, Label_Artist.Content);
                 streamWriter.Close();
 
                 BlackList.Clear();
@@ -1638,73 +1550,6 @@ namespace osu_MusicPlayer
             }
             else
                 Debug.WriteLine("すでに入っています。");
-        }
-    }
-
-    class Discord
-    {
-        public DiscordRpcClient client;
-
-
-        //初期設定
-        public void Initialize(string title, string artist)
-        {
-
-            //clientの設定
-            client = new DiscordRpcClient("744153354124525588");
-
-            //set the logger
-            client.Logger = new ConsoleLogger() { Level = LogLevel.Warning };
-
-            //subscribe to events
-            client.OnReady += (sender, e) =>
-            {
-                Console.WriteLine("Received Ready from user {0}", e.User.Username);
-            };
-
-            client.OnPresenceUpdate += (sender, e) =>
-            {
-                Console.WriteLine("Received Update! {0}", e.Presence);
-            };
-
-            //Connect to the RPC
-            client.Initialize();
-
-            client.SetPresence(new RichPresence()
-            {
-                Details = title,
-                State = artist,
-                Assets = new Assets()
-                {
-                    LargeImageKey = "listening",
-                    LargeImageText = "listening to osu!MusicPlayer"
-                }
-            });
-        }
-
-
-        //更新
-        public void Update(string title, string artist)
-        {
-            //client.Invoke();
-
-            client.SetPresence(new RichPresence()
-            {
-                Details = title,
-                State = artist,
-                Assets = new Assets()
-                {
-                    LargeImageKey = "listening",
-                    LargeImageText = "listening to osu!MusicPlayer",
-                    SmallImageKey = "image_small"
-                }
-            });
-        }
-
-        //終了時の初期化
-        public void Deinitialize()
-        {
-            client.Dispose();
         }
     }
 }
