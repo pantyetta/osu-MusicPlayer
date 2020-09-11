@@ -8,9 +8,8 @@
         mc:Ignorable="d"
         Title="Osu! Music Player - 検索" Height="450" Width="597" ResizeMode="CanMinimize">
     <Grid>
-        <Button x:Name="Button_serch" Content="検索" HorizontalAlignment="Left" Margin="477,11,0,0" VerticalAlignment="Top" Width="75"/>
         <Label x:Name="Label_Text" Content="タイトル・アーティスト・タグでの検索ができます。" HorizontalAlignment="Left" Margin="10,7,0,0" VerticalAlignment="Top" Width="449" Height="28" Foreground="#FFABADB3" VerticalContentAlignment="Center"/>
-        <TextBox x:Name="Text" HorizontalAlignment="Left" Height="23" Margin="10,11,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="449" TextChanged="Text_TextChanged" Foreground="Black" Background="#00000000"/>
+        <TextBox x:Name="Text" HorizontalAlignment="Left" Height="23" Margin="10,11,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="562" TextChanged="Text_TextChanged" Foreground="Black" Background="#00000000"/>
         <ListBox x:Name="ListBox_Result" HorizontalAlignment="Left" Height="361" Margin="10,39,0,0" VerticalAlignment="Top" Width="562"/>
     </Grid>
 </Window>
